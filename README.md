@@ -4,33 +4,58 @@ A high-performance concurrent JSON translation CLI tool written in Go. It automa
 
 ## Features
 
-- **Concurrent Processing**: Multi-worker architecture translates multiple locale files in parallel.
-- **Placeholder Protection**: Safely preserves template placeholders (e.g., `${userName}`, `${count}`) during translation.
+- **Concurrent Processing**: Multi-worker architecture (10 parallel goroutines) translates multiple locale files simultaneously.
+- **Placeholder Protection**: Safely preserves template placeholders (e.g., `${userName}`, `${count}`) during translation using temporary tokens.
 - **Preserved Key Ordering**: Maintains key insertion order using ordered maps.
 - **Incremental Sync & Resume**: Supports checkpoints, incremental updates, and automatic recovery from interrupted runs.
 - **Multi-locale Support**: Generates localization files for 80+ language and regional codes into the `locale/` directory.
 - **Post-processing Safety Net**: Scans generated files to ensure all template variables remain intact.
 
-## Getting Started
+---
+
+## Technical Architecture & Code Flow
+
+1. **Imports & Order Preservation (`main.go`)**:
+   Uses standard library packages (`net/http`, `sync`, `regexp`, `os`) alongside `github.com/iancoleman/orderedmap` to guarantee key ordering is maintained in all output JSON files.
+2. **Master Sync (`syncMasterEnglish`)**:
+   Verifies and synchronizes `en.json` with `locale/locale_en.json`.
+3. **Worker Pool Parallelization**:
+   Spawns 10 concurrent worker goroutines with `sync.WaitGroup` to translate languages simultaneously.
+4. **Placeholder Protection (`translateWithPlaceholderProtection`)**:
+   Replaces `${...}` expressions with temporary `__VAR_X__` tokens, executes API calls, and restores the original placeholders.
+5. **Atomic Disk Operations (`writeOrderedJSON`)**:
+   Writes progress to `.tmp` files before renaming to prevent corrupted state on unexpected interrupts. Every 20 translated keys create a checkpoint.
+6. **Post-Processing Audit (`restorePlaceholdersAcrossAllFiles`)**:
+   Compares all translated strings against the master file to fix any lost variable placeholders.
+
+---
+
+## Installation Guide
 
 ### Prerequisites
 
-- [Go](https://go.dev/doc/install) 1.20+ installed.
+- [Go](https://go.dev/doc/install) 1.20 or higher installed.
 
-### Installation
-
-Clone the repository and install dependencies:
-
+Verify Go installation:
 ```bash
-git clone https://github.com/YazadDumasia/json-translator.git
-cd json-translator
-go mod download
+go version
 ```
 
-### Usage
+### Step-by-Step Installation
 
-1. Place your base source English JSON file named `en.json` in the project root:
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/YazadDumasia/json-translator.git
+   cd json-translator
+   ```
 
+2. **Download dependencies**:
+   ```bash
+   go mod download
+   ```
+
+3. **Prepare source file**:
+   Create your `en.json` file in the root directory:
    ```json
    {
      "welcome": "Welcome back, ${name}!",
@@ -41,20 +66,18 @@ go mod download
    }
    ```
 
-2. Run the translator:
-
+4. **Run the translator**:
    ```bash
    go run main.go
    ```
 
-   Or build and execute the binary:
-
+   *Or compile into an executable binary:*
    ```bash
    go build -o json-translator main.go
    ./json-translator
    ```
 
-3. The generated locale files will be exported to the `locale/` folder (e.g., `locale/locale_fr.json`, `locale/locale_es.json`, `locale/locale_hi.json`, etc.).
+---
 
 ## Output Directory Structure
 
@@ -70,6 +93,8 @@ json-translator/
 │   └── ...
 └── translation.log      # Execution and checkpoint log file
 ```
+
+---
 
 ## License
 
